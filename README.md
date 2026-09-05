@@ -178,9 +178,15 @@ Finishing is **idempotent** when the payload matches the stored result. A differ
 
 Each player appears once with their **best attempt** in that window. Ranking is **moves ASC, then durationMs ASC**, then earlier `ended_at`. Derived `score` is returned for display only and is not the sort key.
 
+
+## Frontend
+
+The browser MVP lives in [`web/`](web/). See [`web/README.md`](web/README.md) to run it against this API on `http://localhost:3000`.
+
 ## Project layout
 
 ```
+web/                  Vite + React puzzle client
 src/
   app.ts              Fastify app + plugins
   index.ts            Process entry
