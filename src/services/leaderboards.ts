@@ -69,17 +69,18 @@ export async function getLeaderboard(
          s.ended_at,
          ROW_NUMBER() OVER (
            PARTITION BY s.user_id
-           ORDER BY s.score DESC, s.moves ASC, s.duration_ms ASC, s.ended_at ASC
+           ORDER BY s.moves ASC, s.duration_ms ASC, s.ended_at ASC
          ) AS best_rank
        FROM game_sessions s
        JOIN users u ON u.id = s.user_id
        WHERE s.game_id = $1
          AND s.status = 'finished'
-         AND s.score IS NOT NULL
+         AND s.moves IS NOT NULL
+         AND s.duration_ms IS NOT NULL
          ${filters.join('\n         ')}
      ) ranked
      WHERE ranked.best_rank = 1
-     ORDER BY ranked.score DESC, ranked.moves ASC, ranked.duration_ms ASC, ranked.ended_at ASC
+     ORDER BY ranked.moves ASC, ranked.duration_ms ASC, ranked.ended_at ASC
      LIMIT $2`,
     params,
   );

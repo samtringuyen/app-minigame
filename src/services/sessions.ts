@@ -1,27 +1,19 @@
 import { query } from '../db/pool.js';
-import { badRequest, conflict, forbidden, notFound } from '../lib/errors.js';
+import { notFound } from '../lib/errors.js';
 import { assertValidAttempt, assertValidMeta, deriveScore } from '../lib/score.js';
 import { generatePuzzleSeed } from '../lib/seed.js';
 import { findGameByIdOrSlug } from './games.js';
+import {
+  assertFinishAccess,
+  assertIssuedChallenge,
+  resultForFinishedSession,
+  type FinishPayload,
+} from './session-finish.js';
+import type { SessionRow } from './session-types.js';
+
+export type { SessionRow, SessionStatus } from './session-types.js';
 
 export const DEFAULT_GAME_SLUG = 'puzzle';
-
-export type SessionStatus = 'active' | 'finished' | 'abandoned';
-
-export type SessionRow = {
-  id: string;
-  user_id: string;
-  game_id: string;
-  started_at: Date;
-  ended_at: Date | null;
-  level_id: string;
-  seed: string;
-  moves: number | null;
-  duration_ms: number | null;
-  score: number | null;
-  meta: Record<string, unknown>;
-  status: SessionStatus;
-};
 
 export type StartedSession = {
   sessionId: string;
@@ -40,6 +32,17 @@ export type FinishedSession = StartedSession & {
   meta: Record<string, unknown>;
 };
 
+export type FinishStore = {
+  getById(id: string): Promise<SessionRow | null>;
+  finishIfActive(input: {
+    sessionId: string;
+    moves: number;
+    durationMs: number;
+    score: number;
+    meta: Record<string, unknown>;
+  }): Promise<SessionRow | null>;
+};
+
 function toStartedSession(row: SessionRow): StartedSession {
   return {
     sessionId: row.id,
@@ -50,7 +53,7 @@ function toStartedSession(row: SessionRow): StartedSession {
   };
 }
 
-function toFinishedSession(row: SessionRow): FinishedSession {
+export function toFinishedSession(row: SessionRow): FinishedSession {
   return {
     ...toStartedSession(row),
     score: row.score ?? 0,
@@ -88,73 +91,59 @@ export async function startSession(
   return toStartedSession(row);
 }
 
+const defaultFinishStore: FinishStore = {
+  getById: getSession,
+  async finishIfActive({ sessionId, moves, durationMs, score, meta }) {
+    const result = await query<SessionRow>(
+      `UPDATE game_sessions
+       SET moves = $2,
+           duration_ms = $3,
+           score = $4,
+           meta = $5::jsonb,
+           ended_at = now(),
+           status = 'finished'
+       WHERE id = $1 AND status = 'active'
+       RETURNING *`,
+      [sessionId, moves, durationMs, score, JSON.stringify(meta)],
+    );
+    return result.rows[0] ?? null;
+  },
+};
+
 export async function finishSession(
   userId: string,
   sessionId: string,
-  input: {
-    levelId: string;
-    seed: string;
-    moves: number;
-    durationMs: number;
-    meta?: Record<string, unknown>;
-  },
+  input: FinishPayload & { meta?: Record<string, unknown> },
+  store: FinishStore = defaultFinishStore,
 ): Promise<FinishedSession> {
   assertValidAttempt(input.moves, input.durationMs);
   const meta = assertValidMeta(input.meta);
   const score = deriveScore(input.moves, input.durationMs);
 
-  const existing = await getSession(sessionId);
-  if (!existing) {
-    throw notFound('Session not found');
-  }
-
-  if (existing.user_id !== userId) {
-    throw forbidden('Session does not belong to this user');
-  }
-
-  if (existing.status === 'abandoned') {
-    throw badRequest('SESSION_ABANDONED', 'Abandoned sessions cannot be finished');
-  }
-
-  const payloadMatches =
-    existing.level_id === input.levelId &&
-    existing.seed === input.seed &&
-    existing.moves === input.moves &&
-    existing.duration_ms === input.durationMs;
+  const existing = assertFinishAccess(await store.getById(sessionId), userId);
 
   if (existing.status === 'finished') {
-    if (payloadMatches) {
-      return toFinishedSession(existing);
-    }
-    throw conflict('SESSION_ALREADY_FINISHED', 'Session is already finished');
+    return toFinishedSession(resultForFinishedSession(existing, input));
   }
 
-  if (existing.level_id !== input.levelId || existing.seed !== input.seed) {
-    throw badRequest(
-      'SESSION_MISMATCH',
-      'levelId and seed must match the values issued when the session started',
-    );
+  assertIssuedChallenge(existing, input);
+
+  const updated = await store.finishIfActive({
+    sessionId,
+    moves: input.moves,
+    durationMs: input.durationMs,
+    score,
+    meta,
+  });
+
+  if (updated) {
+    return toFinishedSession(updated);
   }
 
-  const result = await query<SessionRow>(
-    `UPDATE game_sessions
-     SET moves = $2,
-         duration_ms = $3,
-         score = $4,
-         meta = $5::jsonb,
-         ended_at = now(),
-         status = 'finished'
-     WHERE id = $1 AND status = 'active'
-     RETURNING *`,
-    [sessionId, input.moves, input.durationMs, score, JSON.stringify(meta)],
-  );
-
-  const updated = result.rows[0] ?? (await getSession(sessionId));
-  if (!updated) {
-    throw notFound('Session not found');
-  }
-
-  return toFinishedSession(updated);
+  // Lost the race: another finish already committed. Re-load and apply the
+  // same payload check as the explicit "already finished" path.
+  const raced = assertFinishAccess(await store.getById(sessionId), userId);
+  return toFinishedSession(resultForFinishedSession(raced, input));
 }
 
 export async function getSession(sessionId: string): Promise<SessionRow | null> {

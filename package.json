@@ -16,6 +16,7 @@
     "migrate:down": "node-pg-migrate down --envPath .env",
     "migrate:create": "node-pg-migrate create",
     "lint": "eslint .",
+    "test": "tsx --import ./test/preload-env.ts --test src/lib/score.test.ts src/services/session-finish.test.ts src/services/sessions.test.ts",
     "format": "prettier --write .",
     "format:check": "prettier --check ."
   },

@@ -28,15 +28,16 @@ Without Docker, point `DATABASE_URL` at any Postgres 16 instance and optionally 
 
 ### Useful scripts
 
-| Script                 | Purpose                         |
-| ---------------------- | ------------------------------- |
-| `npm run dev`          | TypeScript watch server (`tsx`) |
-| `npm run build`        | Compile to `dist/`              |
-| `npm start`            | Run the compiled server         |
-| `npm run migrate up`   | Apply pending migrations        |
-| `npm run migrate down` | Roll back the latest migration  |
-| `npm run lint`         | ESLint                          |
-| `npm run format`       | Prettier                        |
+| Script                 | Purpose                          |
+| ---------------------- | -------------------------------- |
+| `npm run dev`          | TypeScript watch server (`tsx`)  |
+| `npm run build`        | Compile to `dist/`               |
+| `npm start`            | Run the compiled server          |
+| `npm run migrate up`   | Apply pending migrations         |
+| `npm run migrate down` | Roll back the latest migration   |
+| `npm run lint`         | ESLint                           |
+| `npm test`             | Unit tests (`node:test` via tsx) |
+| `npm run format`       | Prettier                         |
 
 ## Environment
 
@@ -160,6 +161,7 @@ Higher is better (fewer moves, faster time).
 - `moves` and `durationMs` must be integers `>= 0`
 - `moves` cannot exceed **10,000**
 - `durationMs` cannot exceed **3,600,000** (1 hour)
+- `durationMs = 0` is allowed in MVP and ranks as the fastest possible time. Clients can send `0`; phase 2 will clamp reported duration against `started_at` wall-clock so a spoofed `0` cannot beat a real solve.
 - optional `meta` must be a JSON object smaller than 8 KB
 
 Finishing is **idempotent** when the payload matches the stored result. A different payload on an already finished session returns `409 SESSION_ALREADY_FINISHED`. Abandoned sessions cannot be finished.
@@ -174,7 +176,7 @@ Finishing is **idempotent** when the payload matches the stored result. A differ
 - `weekly` — `ended_at` within the last 7 days
 - `daily` — `ended_at` within the last 24 hours
 
-Each player appears once with their best derived score in that window. Ties break by fewer moves, then lower `durationMs`, then earlier `ended_at`.
+Each player appears once with their **best attempt** in that window. Ranking is **moves ASC, then durationMs ASC**, then earlier `ended_at`. Derived `score` is returned for display only and is not the sort key.
 
 ## Project layout
 

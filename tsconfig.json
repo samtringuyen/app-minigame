@@ -19,5 +19,5 @@
     "verbatimModuleSyntax": false
   },
   "include": ["src"],
-  "exclude": ["dist", "node_modules", "migrations"]
+  "exclude": ["dist", "node_modules", "migrations", "src/**/*.test.ts"]
 }
