@@ -54,7 +54,7 @@ export function LeaderboardScreen({ userId, onBack }: LeaderboardScreenProps) {
     <section className="panel board-panel">
       <div className="panel-head">
         <div>
-          <p className="eyebrow">Ranked by derived score</p>
+          <p className="eyebrow">Ranked by moves↑ then time↑</p>
           <h2>Leaderboard</h2>
         </div>
         <button type="button" className="btn btn-ghost" onClick={onBack}>

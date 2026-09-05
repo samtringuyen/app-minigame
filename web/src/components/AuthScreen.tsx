@@ -69,7 +69,7 @@ export function AuthScreen() {
           <li>
             Finish sends <code>moves</code> and <code>durationMs</code> only
           </li>
-          <li>Leaderboards rank the derived score</li>
+          <li>Leaderboards rank by moves↑ then time↑</li>
         </ul>
       </section>
 

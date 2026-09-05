@@ -319,8 +319,8 @@ const server = createServer(async (req, res) => {
         const current = best.get(session.userId);
         if (
           !current ||
-          session.score > current.score ||
-          (session.score === current.score && session.moves < current.moves)
+          session.moves < current.moves ||
+          (session.moves === current.moves && session.durationMs < current.durationMs)
         ) {
           const owner = users.get(session.userId);
           best.set(session.userId, {
@@ -336,7 +336,7 @@ const server = createServer(async (req, res) => {
       }
 
       const entries = [...best.values()]
-        .sort((a, b) => b.score - a.score || a.moves - b.moves || a.durationMs - b.durationMs)
+        .sort((a, b) => a.moves - b.moves || a.durationMs - b.durationMs)
         .map((entry, index) => ({ rank: index + 1, ...entry }));
 
       json(res, 200, {
