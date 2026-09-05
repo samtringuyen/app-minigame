@@ -9,6 +9,7 @@ import {
   nextLevelId,
   tryMove,
 } from './engine';
+import { solveSlides } from './solve';
 
 describe('puzzle engine', () => {
   test('same seed and levelId produce the same board', () => {
@@ -36,6 +37,18 @@ describe('puzzle engine', () => {
     expect(hintIndex(board)).toBe(8);
     const after = tryMove(board, 8)!;
     expect(manhattan(after)).toBeLessThan(manhattan(board));
+  });
+
+  test('generated boards can be solved with legal slides', () => {
+    const board = generateBoard('0123456789abcdef0123456789abcdef', 'level-1');
+    const slides = solveSlides(board);
+    expect(slides.length).toBeGreaterThan(0);
+    const solved = slides.reduce((current, index) => {
+      const next = tryMove(current, index);
+      expect(next).not.toBeNull();
+      return next!;
+    }, board);
+    expect(isSolved(solved)).toBe(true);
   });
 
   test('level helpers stay aligned with the API levelId format', () => {

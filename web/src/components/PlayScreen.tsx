@@ -263,6 +263,7 @@ export function PlayScreen() {
             <button
               type="button"
               className="btn btn-ghost"
+              data-testid="reward-hint"
               disabled={busy || Boolean(result)}
               onClick={() => requestReward('hint')}
             >
@@ -271,6 +272,7 @@ export function PlayScreen() {
             <button
               type="button"
               className="btn btn-ghost"
+              data-testid="reward-skip"
               disabled={busy || Boolean(result) || !session}
               onClick={() => requestReward('skip')}
             >
@@ -279,6 +281,7 @@ export function PlayScreen() {
             <button
               type="button"
               className="btn btn-ghost"
+              data-testid="reward-moves"
               disabled={busy || Boolean(result)}
               onClick={() => requestReward('moves')}
             >
@@ -325,10 +328,20 @@ export function PlayScreen() {
             </div>
             <div className="reward-row between">
               <p className="muted">Boost the next round (stub)</p>
-              <button type="button" className="btn btn-ghost" onClick={() => requestReward('hint')}>
+              <button
+                type="button"
+                className="btn btn-ghost"
+                data-testid="reward-hint-next"
+                onClick={() => requestReward('hint')}
+              >
                 Hint next
               </button>
-              <button type="button" className="btn btn-ghost" onClick={() => requestReward('moves')}>
+              <button
+                type="button"
+                className="btn btn-ghost"
+                data-testid="reward-moves-next"
+                onClick={() => requestReward('moves')}
+              >
                 +Moves next
               </button>
             </div>
