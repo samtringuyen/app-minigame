@@ -1,7 +1,10 @@
 import { query } from '../db/pool.js';
-import { badRequest, forbidden, notFound } from '../lib/errors.js';
-import { assertValidMeta, assertValidScore } from '../lib/score.js';
+import { badRequest, conflict, forbidden, notFound } from '../lib/errors.js';
+import { assertValidAttempt, assertValidMeta, deriveScore } from '../lib/score.js';
+import { generatePuzzleSeed } from '../lib/seed.js';
 import { findGameByIdOrSlug } from './games.js';
+
+export const DEFAULT_GAME_SLUG = 'puzzle';
 
 export type SessionStatus = 'active' | 'finished' | 'abandoned';
 
@@ -11,54 +14,70 @@ export type SessionRow = {
   game_id: string;
   started_at: Date;
   ended_at: Date | null;
+  level_id: string;
+  seed: string;
+  moves: number | null;
+  duration_ms: number | null;
   score: number | null;
   meta: Record<string, unknown>;
   status: SessionStatus;
 };
 
-export type PublicSession = {
-  id: string;
-  userId: string;
+export type StartedSession = {
+  sessionId: string;
+  levelId: string;
+  seed: string;
   gameId: string;
   startedAt: string;
-  endedAt: string | null;
-  score: number | null;
-  meta: Record<string, unknown>;
-  status: SessionStatus;
 };
 
-export function toPublicSession(row: SessionRow): PublicSession {
+export type FinishedSession = StartedSession & {
+  score: number;
+  moves: number;
+  durationMs: number;
+  status: 'finished';
+  endedAt: string;
+  meta: Record<string, unknown>;
+};
+
+function toStartedSession(row: SessionRow): StartedSession {
   return {
-    id: row.id,
-    userId: row.user_id,
+    sessionId: row.id,
+    levelId: row.level_id,
+    seed: row.seed,
     gameId: row.game_id,
     startedAt: row.started_at.toISOString(),
-    endedAt: row.ended_at ? row.ended_at.toISOString() : null,
-    score: row.score,
+  };
+}
+
+function toFinishedSession(row: SessionRow): FinishedSession {
+  return {
+    ...toStartedSession(row),
+    score: row.score ?? 0,
+    moves: row.moves ?? 0,
+    durationMs: row.duration_ms ?? 0,
+    status: 'finished',
+    endedAt: row.ended_at ? row.ended_at.toISOString() : new Date().toISOString(),
     meta: row.meta,
-    status: row.status,
   };
 }
 
 export async function startSession(
   userId: string,
-  input: { gameId?: string; gameSlug?: string },
-): Promise<PublicSession> {
-  const key = input.gameId ?? input.gameSlug;
-  if (!key) {
-    throw badRequest('GAME_REQUIRED', 'Provide gameId or gameSlug');
-  }
-
+  input: { gameId?: string; gameSlug?: string; levelId: string },
+): Promise<StartedSession> {
+  const key = input.gameId ?? input.gameSlug ?? DEFAULT_GAME_SLUG;
   const game = await findGameByIdOrSlug(key);
   if (!game) {
     throw notFound('Game not found');
   }
 
+  const seed = generatePuzzleSeed();
   const result = await query<SessionRow>(
-    `INSERT INTO game_sessions (user_id, game_id, status)
-     VALUES ($1, $2, 'active')
+    `INSERT INTO game_sessions (user_id, game_id, level_id, seed, status)
+     VALUES ($1, $2, $3, $4, 'active')
      RETURNING *`,
-    [userId, game.id],
+    [userId, game.id, input.levelId, seed],
   );
 
   const row = result.rows[0];
@@ -66,16 +85,23 @@ export async function startSession(
     throw new Error('Failed to create session');
   }
 
-  return toPublicSession(row);
+  return toStartedSession(row);
 }
 
 export async function finishSession(
   userId: string,
   sessionId: string,
-  input: { score: number; meta?: Record<string, unknown> },
-): Promise<PublicSession> {
-  assertValidScore(input.score);
+  input: {
+    levelId: string;
+    seed: string;
+    moves: number;
+    durationMs: number;
+    meta?: Record<string, unknown>;
+  },
+): Promise<FinishedSession> {
+  assertValidAttempt(input.moves, input.durationMs);
   const meta = assertValidMeta(input.meta);
+  const score = deriveScore(input.moves, input.durationMs);
 
   const existing = await getSession(sessionId);
   if (!existing) {
@@ -90,20 +116,37 @@ export async function finishSession(
     throw badRequest('SESSION_ABANDONED', 'Abandoned sessions cannot be finished');
   }
 
-  // Idempotent: a finished session is returned as-is so retries are safe.
+  const payloadMatches =
+    existing.level_id === input.levelId &&
+    existing.seed === input.seed &&
+    existing.moves === input.moves &&
+    existing.duration_ms === input.durationMs;
+
   if (existing.status === 'finished') {
-    return toPublicSession(existing);
+    if (payloadMatches) {
+      return toFinishedSession(existing);
+    }
+    throw conflict('SESSION_ALREADY_FINISHED', 'Session is already finished');
+  }
+
+  if (existing.level_id !== input.levelId || existing.seed !== input.seed) {
+    throw badRequest(
+      'SESSION_MISMATCH',
+      'levelId and seed must match the values issued when the session started',
+    );
   }
 
   const result = await query<SessionRow>(
     `UPDATE game_sessions
-     SET score = $2,
-         meta = $3::jsonb,
+     SET moves = $2,
+         duration_ms = $3,
+         score = $4,
+         meta = $5::jsonb,
          ended_at = now(),
          status = 'finished'
      WHERE id = $1 AND status = 'active'
      RETURNING *`,
-    [sessionId, input.score, JSON.stringify(meta)],
+    [sessionId, input.moves, input.durationMs, score, JSON.stringify(meta)],
   );
 
   const updated = result.rows[0] ?? (await getSession(sessionId));
@@ -111,7 +154,7 @@ export async function finishSession(
     throw notFound('Session not found');
   }
 
-  return toPublicSession(updated);
+  return toFinishedSession(updated);
 }
 
 export async function getSession(sessionId: string): Promise<SessionRow | null> {

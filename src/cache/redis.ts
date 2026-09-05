@@ -6,8 +6,15 @@ export const redis = env.REDIS_URL
       lazyConnect: true,
       maxRetriesPerRequest: 1,
       enableOfflineQueue: false,
+      retryStrategy: () => null,
     })
   : null;
+
+if (redis) {
+  redis.on('error', () => {
+    // Optional cache: connection errors must not crash the process.
+  });
+}
 
 export async function connectRedis(): Promise<void> {
   if (!redis) {
@@ -18,8 +25,8 @@ export async function connectRedis(): Promise<void> {
     if (redis.status === 'wait') {
       await redis.connect();
     }
-  } catch (error) {
-    console.warn('Redis is unavailable; continuing without cache', error);
+  } catch {
+    console.warn('Redis is unavailable; continuing without cache');
   }
 }
 

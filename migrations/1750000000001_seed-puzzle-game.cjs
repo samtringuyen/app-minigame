@@ -4,7 +4,7 @@
 exports.up = (pgm) => {
   pgm.sql(`
     INSERT INTO games (slug, title, rules_version)
-    VALUES ('demo', 'Demo Game', '1')
+    VALUES ('puzzle', 'Puzzle', '1')
     ON CONFLICT (slug) DO NOTHING;
   `);
 };
@@ -13,5 +13,5 @@ exports.up = (pgm) => {
  * @param {import('node-pg-migrate').MigrationBuilder} pgm
  */
 exports.down = (pgm) => {
-  pgm.sql(`DELETE FROM games WHERE slug = 'demo';`);
+  pgm.sql(`DELETE FROM games WHERE slug = 'puzzle';`);
 };

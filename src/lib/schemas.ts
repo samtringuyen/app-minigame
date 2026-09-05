@@ -33,22 +33,32 @@ export const patchMeSchema = z.object({
   displayName: z.string().trim().min(1).max(32),
 });
 
-export const startSessionSchema = z
-  .object({
-    gameId: z.string().uuid().optional(),
-    gameSlug: z.string().trim().min(1).max(64).optional(),
-  })
-  .refine((value) => Boolean(value.gameId || value.gameSlug), {
-    message: 'gameId or gameSlug is required',
-  });
+const levelIdSchema = z
+  .string()
+  .trim()
+  .min(1)
+  .max(64)
+  .regex(/^[A-Za-z0-9._-]+$/, 'levelId must be alphanumeric (dots, underscores, dashes allowed)');
 
-export const finishSessionSchema = z.object({
-  score: z.number().finite(),
-  meta: z.record(z.string(), z.unknown()).optional(),
+export const startSessionSchema = z.object({
+  gameId: z.string().uuid().optional(),
+  gameSlug: z.string().trim().min(1).max(64).optional(),
+  levelId: levelIdSchema,
 });
+
+export const finishSessionSchema = z
+  .object({
+    levelId: levelIdSchema,
+    seed: z.string().trim().min(1).max(128),
+    moves: z.number().int(),
+    durationMs: z.number().int(),
+    meta: z.record(z.string(), z.unknown()).optional(),
+  })
+  .strict();
 
 export const leaderboardQuerySchema = z.object({
   period: z.enum(['all', 'weekly', 'daily']).default('all'),
+  levelId: z.string().trim().min(1).max(64).optional(),
 });
 
 export const gameIdOrSlugSchema = z.string().trim().min(1).max(80);

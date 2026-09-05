@@ -1,26 +1,44 @@
-import { env } from '../config/env.js';
 import { badRequest } from './errors.js';
 
 const META_MAX_BYTES = 8 * 1024;
 
+/** Highest accepted move count (inclusive). */
+export const MAX_MOVES = 10_000;
+
+/** Highest accepted solve time (inclusive): 1 hour. */
+export const MAX_DURATION_MS = 60 * 60 * 1000;
+
 /**
- * Score rule (v1):
- * - must be a finite number
- * - must be >= 0 (negative scores are rejected)
- * - must be <= MAX_SCORE (default 1_000_000) to reject absurdly high values
+ * Derived score (higher is better):
+ *   max(0, 100_000 - moves * 100 - floor(durationMs / 100))
+ *
+ * Fewer moves and faster times rank higher. The server never accepts a client score.
  */
-export function assertValidScore(score: number): void {
-  if (!Number.isFinite(score)) {
-    throw badRequest('INVALID_SCORE', 'Score must be a finite number');
+export const SCORE_BASE = 100_000;
+export const SCORE_MOVE_PENALTY = 100;
+export const SCORE_MS_PER_POINT = 100;
+
+export function deriveScore(moves: number, durationMs: number): number {
+  return Math.max(
+    0,
+    SCORE_BASE - moves * SCORE_MOVE_PENALTY - Math.floor(durationMs / SCORE_MS_PER_POINT),
+  );
+}
+
+export function assertValidAttempt(moves: number, durationMs: number): void {
+  if (!Number.isInteger(moves) || moves < 0) {
+    throw badRequest('INVALID_MOVES', 'moves must be an integer >= 0');
+  }
+  if (moves > MAX_MOVES) {
+    throw badRequest('INVALID_MOVES', `moves cannot exceed ${MAX_MOVES}`, { maxMoves: MAX_MOVES });
   }
 
-  if (score < 0) {
-    throw badRequest('INVALID_SCORE', 'Score cannot be negative');
+  if (!Number.isInteger(durationMs) || durationMs < 0) {
+    throw badRequest('INVALID_DURATION', 'durationMs must be an integer >= 0');
   }
-
-  if (score > env.MAX_SCORE) {
-    throw badRequest('INVALID_SCORE', `Score cannot exceed ${env.MAX_SCORE}`, {
-      maxScore: env.MAX_SCORE,
+  if (durationMs > MAX_DURATION_MS) {
+    throw badRequest('INVALID_DURATION', `durationMs cannot exceed ${MAX_DURATION_MS}`, {
+      maxDurationMs: MAX_DURATION_MS,
     });
   }
 }

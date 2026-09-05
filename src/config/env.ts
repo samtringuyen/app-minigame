@@ -12,7 +12,6 @@ const envSchema = z.object({
   JWT_REFRESH_SECRET: z.string().min(32, 'JWT_REFRESH_SECRET must be at least 32 characters'),
   JWT_ACCESS_TTL: z.string().default('15m'),
   JWT_REFRESH_TTL: z.string().default('7d'),
-  MAX_SCORE: z.coerce.number().positive().default(1_000_000),
   CORS_ORIGIN: z.string().default('*'),
 });
 

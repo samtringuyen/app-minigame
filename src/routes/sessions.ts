@@ -7,7 +7,7 @@ export async function sessionsRoutes(app: FastifyInstance): Promise<void> {
   app.post('/sessions', { preHandler: authenticate }, async (request, reply) => {
     const body = startSessionSchema.parse(request.body);
     const session = await startSession(request.authUser.id, body);
-    return reply.status(201).send({ session });
+    return reply.status(201).send(session);
   });
 
   app.post(
@@ -24,8 +24,7 @@ export async function sessionsRoutes(app: FastifyInstance): Promise<void> {
     async (request) => {
       const sessionId = sessionIdSchema.parse((request.params as { id: string }).id);
       const body = finishSessionSchema.parse(request.body);
-      const session = await finishSession(request.authUser.id, sessionId, body);
-      return { session };
+      return finishSession(request.authUser.id, sessionId, body);
     },
   );
 }

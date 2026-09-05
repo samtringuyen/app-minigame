@@ -82,7 +82,11 @@ exports.up = (pgm) => {
       default: pgm.func('now()'),
     },
     ended_at: { type: 'timestamptz' },
-    score: { type: 'double precision' },
+    level_id: { type: 'text', notNull: true },
+    seed: { type: 'text', notNull: true },
+    moves: { type: 'integer' },
+    duration_ms: { type: 'integer' },
+    score: { type: 'integer' },
     meta: { type: 'jsonb', notNull: true, default: pgm.func("'{}'::jsonb") },
     status: { type: 'text', notNull: true, default: 'active' },
   });
@@ -93,7 +97,7 @@ exports.up = (pgm) => {
 
   pgm.createIndex('game_sessions', ['user_id']);
   pgm.createIndex('game_sessions', ['game_id', 'status', 'ended_at']);
-  pgm.createIndex('game_sessions', ['game_id', 'score'], {
+  pgm.createIndex('game_sessions', ['game_id', 'level_id', 'score'], {
     where: "status = 'finished' AND score IS NOT NULL",
   });
 

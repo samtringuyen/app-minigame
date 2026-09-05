@@ -1,8 +1,8 @@
 # app-minigame
 
-Backend for the minigame app: solo play, accounts, sessions, and leaderboards.
+Backend for the minigame app: solo **puzzle** play, accounts, sessions, and leaderboards.
 
-v1 is a small HTTP API. There are no rooms or WebSockets.
+v1 is a small HTTP API. There are no rooms or WebSockets. The client never submits a raw score; the server issues a seed and derives the score from moves and time.
 
 ## Stack
 
@@ -50,7 +50,6 @@ Optional:
 
 - `REDIS_URL` — when unset, `/health` reports `"redis": "disabled"`
 - `JWT_ACCESS_TTL` (default `15m`) and `JWT_REFRESH_TTL` (default `7d`)
-- `MAX_SCORE` (default `1000000`)
 - `CORS_ORIGIN` (`*` or a comma-separated list)
 
 Do not commit `.env` or real secrets.
@@ -127,29 +126,55 @@ Send the access token as `Authorization: Bearer <token>`. Refresh tokens are JWT
 
 `GET /games`
 
-A `demo` game is seeded by migrations (`slug: "demo"`, `rules_version: "1"`).
+A `puzzle` game is seeded by migrations (`slug: "puzzle"`, `title: "Puzzle"`, `rules_version: "1"`).
 
 ### Sessions
 
-`POST /sessions` `{ gameId }` or `{ gameSlug }` (auth) → `201`
+`POST /sessions` (auth) `{ levelId, gameSlug?, gameId? }` → `201`
 
-`POST /sessions/:id/finish` `{ score, meta? }` (auth)
+If both `gameId` and `gameSlug` are omitted, the seeded `puzzle` game is used. The server generates `seed` (16 random bytes, hex). Clients must not send a seed.
 
-**Score rule:** `score` must be a finite number, `>= 0`, and `<= MAX_SCORE` (default **1,000,000**). Negative and absurdly high scores are rejected with `INVALID_SCORE`. Optional `meta` must be a JSON object smaller than 8 KB.
+```json
+{
+  "sessionId": "...",
+  "levelId": "level-1",
+  "seed": "a1b2…",
+  "gameId": "...",
+  "startedAt": "2026-09-05T08:00:00.000Z"
+}
+```
 
-Finishing is **idempotent**: repeating `POST /sessions/:id/finish` on an already finished session returns the stored session and does not change score or meta. Abandoned sessions cannot be finished.
+`POST /sessions/:id/finish` (auth) `{ levelId, seed, moves, durationMs, meta? }`
+
+A client `score` field is rejected (`400`). The server derives score:
+
+```
+score = max(0, 100000 - moves * 100 - floor(durationMs / 100))
+```
+
+Higher is better (fewer moves, faster time).
+
+**Attempt rules:**
+
+- `levelId` and `seed` must match the values issued at start (`SESSION_MISMATCH`)
+- `moves` and `durationMs` must be integers `>= 0`
+- `moves` cannot exceed **10,000**
+- `durationMs` cannot exceed **3,600,000** (1 hour)
+- optional `meta` must be a JSON object smaller than 8 KB
+
+Finishing is **idempotent** when the payload matches the stored result. A different payload on an already finished session returns `409 SESSION_ALREADY_FINISHED`. Abandoned sessions cannot be finished.
 
 ### Leaderboards
 
-`GET /leaderboards/:gameIdOrSlug?period=all|weekly|daily`
+`GET /leaderboards/:gameIdOrSlug?period=all|weekly|daily&levelId=`
 
-`:gameIdOrSlug` accepts a game UUID or slug (for example `demo`).
+`:gameIdOrSlug` accepts a game UUID or slug (for example `puzzle`). Optional `levelId` limits the board to one puzzle.
 
 - `all` — every finished session
 - `weekly` — `ended_at` within the last 7 days
 - `daily` — `ended_at` within the last 24 hours
 
-Each player appears once, using their best score in that window (ties break by earlier `ended_at`).
+Each player appears once with their best derived score in that window. Ties break by fewer moves, then lower `durationMs`, then earlier `ended_at`.
 
 ## Project layout
 

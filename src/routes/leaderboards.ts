@@ -8,6 +8,6 @@ export async function leaderboardRoutes(app: FastifyInstance): Promise<void> {
       (request.params as { gameIdOrSlug: string }).gameIdOrSlug,
     );
     const query = leaderboardQuerySchema.parse(request.query);
-    return getLeaderboard(gameIdOrSlug, query.period);
+    return getLeaderboard(gameIdOrSlug, query.period, query.levelId);
   });
 }
